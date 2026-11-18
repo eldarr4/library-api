@@ -6,10 +6,15 @@ import book_repository
 import member_repository
 import loan_repository
 import report_repository
+from errors import LibraryError, error_response
+from fines import money
 
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
+@app.errorhandler(LibraryError)
+def handle_library_error(error):
+    return error_response(error.message, error.status)
 
 CURRENT_MEMBER = None
 
@@ -31,10 +36,6 @@ def check(value, kind):
     elif kind == "member_type":
         return value in ("student", "staff")
     return False
-
-
-def money(x):
-    return round(float(x), 2)
 
 
 def notify(kind, title="", send=True):
