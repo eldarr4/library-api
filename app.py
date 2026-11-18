@@ -6,8 +6,10 @@ import book_repository
 import member_repository
 import loan_repository
 import report_repository
+import book_service
 from errors import LibraryError, error_response
 from fines import money
+
 
 from flask import Flask, jsonify, request
 
@@ -59,43 +61,26 @@ def notify(kind, title="", send=True):
 def book_json(book):
     return {"id": book["id"], "title": book["title"], "author": book["author"], "isbn": book["isbn"], "available": bool(book["available"])}
 
-
 @app.route("/books", methods=["GET"])
 def list_books():
-    rows = book_repository.list_books(request.args.get("available") == "true")
-    result = []
-    for r in rows:
-        result.append(book_json(r))
-    return jsonify(result)
+    only_available = request.args.get("available") == "true"
+    return jsonify([book_json(b) for b in book_service.list_books(only_available)])
 
 
 @app.route("/books/<int:book_id>", methods=["GET"])
 def get_book(book_id):
-    r = book_repository.get_book(book_id)
-    if r is None:
-        return jsonify({"error": "book not found"}), 404
-    return jsonify(book_json(r))
+    return jsonify(book_json(book_service.get_book(book_id)))
 
 
 @app.route("/books", methods=["POST"])
 def create_book():
     data = request.get_json(silent=True) or {}
-    if not data.get("title") or not data.get("author"):
-        return jsonify({"error": "title and author are required"}), 400
-    if not check(data.get("isbn"), "isbn"):
-        return jsonify({"error": "invalid isbn"}), 400
-    r = book_repository.create_book(data["title"], data["author"], data["isbn"])
-    return jsonify(book_json(r)), 201
+    return jsonify(book_json(book_service.create_book(data))), 201
 
 
 @app.route("/books/<int:book_id>", methods=["DELETE"])
 def delete_book(book_id):
-    r = book_repository.get_book(book_id)
-    if r is None:
-        return jsonify({"error": "book not found"}), 404
-    if r["available"] == 0:
-        return jsonify({"error": "book is on loan"}), 409
-    book_repository.delete_book(book_id)
+    book_service.delete_book(book_id)
     return "", 204
 
 
