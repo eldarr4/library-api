@@ -9,6 +9,7 @@ import report_repository
 import book_service
 import loan_service
 import member_service
+import report_service
 from errors import LibraryError, error_response
 from fines import money
 
@@ -185,35 +186,11 @@ def pay_fine(loan_id):
 
 @app.route("/reports/overdue", methods=["GET"])
 def report_overdue():
-    rows = report_repository.list_open_loans_with_details()
-    items = []
-    total = 0
-    for r in rows:
-        days_late = (date.today() - date.fromisoformat(r["due_date"])).days
-        if days_late > 0:
-            fine = days_late * 0.5
-            total += fine
-            items.append(
-                {"loan_id": r["loan_id"], "title": r["title"], "member": r["member"], "days_late": days_late, "fine": money(fine)}
-            )
-    return jsonify({"items": items, "total_fines": money(total)})
-
+    return jsonify(report_service.overdue_report())
 
 @app.route("/reports/summary", methods=["GET"])
 def report_summary():
-    total_books = book_repository.count_books()
-    rows = loan_repository.list_loans()
-    on_loan = 0
-    outstanding = 0
-    for loan in rows:
-        if loan["returned"] == 0:
-            on_loan += 1
-            days_late = (date.today() - date.fromisoformat(loan["due_date"])).days
-            outstanding += max(0, days_late) * 0.50
-        elif loan["fine_paid"] == 0:
-            outstanding += loan["fine"]
-    return jsonify({"total_books": total_books, "on_loan": on_loan, "fines_outstanding": money(outstanding)})
-
+    return jsonify(report_service.summary_report())
 
 if not os.path.exists("library.db"):
     init_db()
