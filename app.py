@@ -3,6 +3,7 @@ import re
 from datetime import date, timedelta
 import db
 from db import init_db
+import book_repository
 
 from flask import Flask, jsonify, request
 
@@ -52,29 +53,25 @@ def notify(kind, title="", send=True):
 
 # ---------- books ----------
 
+def book_json(book):
+    return {"id": book["id"], "title": book["title"], "author": book["author"], "isbn": book["isbn"], "available": bool(book["available"])}
+
 
 @app.route("/books", methods=["GET"])
 def list_books():
-    conn = db.connect()
-    if request.args.get("available") == "true":
-        rows = conn.execute("SELECT * FROM books WHERE available = 1").fetchall()
-    else:
-        rows = conn.execute("SELECT * FROM books").fetchall()
-    conn.close()
+    rows = book_repository.list_books(request.args.get("available") == "true")
     result = []
     for r in rows:
-        result.append({"id": r[0], "title": r[1], "author": r[2], "isbn": r[3], "available": bool(r[4])})
+        result.append(book_json(r))
     return jsonify(result)
 
 
 @app.route("/books/<int:book_id>", methods=["GET"])
 def get_book(book_id):
-    conn = db.connect()
-    r = conn.execute("SELECT * FROM books WHERE id = ?", (book_id,)).fetchone()
-    conn.close()
+    r = book_repository.get_book(book_id)
     if r is None:
         return jsonify({"error": "book not found"}), 404
-    return jsonify({"id": r[0], "title": r[1], "author": r[2], "isbn": r[3], "available": bool(r[4])})
+    return jsonify(book_json(r))
 
 
 @app.route("/books", methods=["POST"])
@@ -84,30 +81,18 @@ def create_book():
         return jsonify({"error": "title and author are required"}), 400
     if not check(data.get("isbn"), "isbn"):
         return jsonify({"error": "invalid isbn"}), 400
-    conn = db.connect()
-    cur = conn.execute(
-        "INSERT INTO books (title, author, isbn, available) VALUES (?, ?, ?, 1)",
-        (data["title"], data["author"], data["isbn"]),
-    )
-    conn.commit()
-    r = conn.execute("SELECT * FROM books WHERE id = ?", (cur.lastrowid,)).fetchone()
-    conn.close()
-    return jsonify({"id": r[0], "title": r[1], "author": r[2], "isbn": r[3], "available": bool(r[4])}), 201
+    r = book_repository.create_book(data["title"], data["author"], data["isbn"])
+    return jsonify(book_json(r)), 201
 
 
 @app.route("/books/<int:book_id>", methods=["DELETE"])
 def delete_book(book_id):
-    conn = db.connect()
-    r = conn.execute("SELECT * FROM books WHERE id = ?", (book_id,)).fetchone()
+    r = book_repository.get_book(book_id)
     if r is None:
-        conn.close()
         return jsonify({"error": "book not found"}), 404
-    if r[4] == 0:
-        conn.close()
+    if r["available"] == 0:
         return jsonify({"error": "book is on loan"}), 409
-    conn.execute("DELETE FROM books WHERE id = ?", (book_id,))
-    conn.commit()
-    conn.close()
+    book_repository.delete_book(book_id)
     return "", 204
 
 
